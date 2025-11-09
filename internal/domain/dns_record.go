@@ -16,16 +16,15 @@ const (
 
 var (
 	ErrInvalidDomainName  = errors.New("invalid domain name format")
-	ErrInvalidRecordType  = errors.New("invalid record type, must be CNAME or A")
+	ErrInvalidRecordType  = errors.New("invalid record type") // Updated message
 	ErrInvalidRecordValue = errors.New("invalid record value for the given type")
 )
 
-// domainNameRegex is a simple regex for domain name validation.
-// It allows for subdomains and a TLD.
-var domainNameRegex = regexp.MustCompile(`^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$`)
+// domainNameRegex validates domain names, ensuring labels don't start or end with a hyphen.
+var domainNameRegex = regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$`)
 
-// ipv4Regex checks for a valid IPv4 address.
-var ipv4Regex = regexp.MustCompile(`^(\d{1,3}\.){3}\d{1,3}$`)
+// ipv4Regex validates IPv4 addresses.
+var ipv4Regex = regexp.MustCompile(`^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$`)
 
 type DNSRecord struct {
 	ID         int64
@@ -46,12 +45,12 @@ func NewDNSRecord(userID int64, domainName, value string, recordType RecordType)
 	}
 
 	switch recordType {
-	case CNAME:
-		if !domainNameRegex.MatchString(value) {
+	case A: // Reordered cases
+		if !ipv4Regex.MatchString(value) {
 			return nil, ErrInvalidRecordValue
 		}
-	case A:
-		if !ipv4Regex.MatchString(value) {
+	case CNAME:
+		if !domainNameRegex.MatchString(value) {
 			return nil, ErrInvalidRecordValue
 		}
 	default:

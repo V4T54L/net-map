@@ -2,6 +2,7 @@ package http
 
 import (
 	"internal-dns/internal/domain"
+	"internal-dns/internal/infrastructure/transport/http/middleware"
 	"internal-dns/internal/repository"
 	"internal-dns/internal/usecase"
 	"net/http"
@@ -13,12 +14,12 @@ import (
 
 // UserResponse is a DTO for user data sent to clients.
 type UserResponse struct {
-	ID        int64            `json:"id"`
-	Username  string           `json:"username"`
-	Role      domain.UserRole  `json:"role"`
-	IsEnabled bool             `json:"is_enabled"`
-	CreatedAt time.Time        `json:"created_at"`
-	UpdatedAt time.Time        `json:"updated_at"`
+	ID        int64           `json:"id"`
+	Username  string          `json:"username"`
+	Role      domain.UserRole `json:"role"`
+	IsEnabled bool            `json:"is_enabled"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
 }
 
 func toUserResponse(user *domain.User) UserResponse {
@@ -42,7 +43,7 @@ func toUserResponseList(users []*domain.User) []UserResponse {
 
 // UpdateUserStatusRequest defines the payload for updating a user's status.
 type UpdateUserStatusRequest struct {
-	IsEnabled *bool `json:"is_enabled"`
+	IsEnabled *bool `json:"is_enabled" validate:"required"` // Added validate tag
 }
 
 // UserHandler handles user management HTTP requests.
@@ -59,7 +60,7 @@ func NewUserHandler(userUC usecase.UserUseCase) *UserHandler {
 func (h *UserHandler) ListUsers(c echo.Context) error {
 	users, err := h.userUC.ListUsers(c.Request().Context())
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve users"})
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve users") // Changed error response
 	}
 	return c.JSON(http.StatusOK, toUserResponseList(users))
 }
@@ -68,15 +69,15 @@ func (h *UserHandler) ListUsers(c echo.Context) error {
 func (h *UserHandler) GetUser(c echo.Context) error {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid user ID") // Changed error response
 	}
 
 	user, err := h.userUC.GetUserByID(c.Request().Context(), id)
 	if err != nil {
 		if err == repository.ErrUserNotFound {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+			return echo.NewHTTPError(http.StatusNotFound, "User not found") // Changed error response
 		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve user"})
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to retrieve user") // Changed error response
 	}
 
 	return c.JSON(http.StatusOK, toUserResponse(user))
@@ -86,25 +87,31 @@ func (h *UserHandler) GetUser(c echo.Context) error {
 func (h *UserHandler) UpdateUserStatus(c echo.Context) error {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid user ID") // Changed error response
 	}
 
 	req := new(UpdateUserStatusRequest)
 	if err := c.Bind(req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+		return echo.NewHTTPError(http.StatusBadRequest, "Invalid request payload") // Changed error response
 	}
 
 	if req.IsEnabled == nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "'is_enabled' field is required"})
+		return echo.NewHTTPError(http.StatusBadRequest, "'is_enabled' field is required") // Changed error response
 	}
 
-	user, err := h.userUC.UpdateUserStatus(c.Request().Context(), id, *req.IsEnabled)
+	actor := c.Get(middleware.UserContextKey).(*domain.User) // Added actor retrieval
+	if actor == nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")
+	}
+
+	user, err := h.userUC.UpdateUserStatus(c.Request().Context(), actor.ID, id, *req.IsEnabled) // Changed signature
 	if err != nil {
 		if err == repository.ErrUserNotFound {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+			return echo.NewHTTPError(http.StatusNotFound, "User not found") // Changed error response
 		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user status"})
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to update user status") // Changed error response
 	}
 
 	return c.JSON(http.StatusOK, toUserResponse(user))
 }
+

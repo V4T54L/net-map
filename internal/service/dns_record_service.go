@@ -3,11 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"log" // Added log import
 
 	"internal-dns/internal/domain"
 	"internal-dns/internal/infrastructure/cache"
 	"internal-dns/internal/repository"
-	"internal-dns/internal/usecase"
+	"internal-dns/internal/usecase" // Keep usecase import for interface
 	"internal-dns/pkg/bloomfilter"
 )
 
@@ -15,44 +16,63 @@ type dnsRecordService struct {
 	dnsRepo     repository.DNSRecordRepository
 	bloomFilter bloomfilter.Filter
 	cache       cache.DNSRecordCache
+	auditRepo   repository.AuditLogRepository // Added auditRepo
 }
 
 // NewDNSRecordService creates a new DNSRecordUseCase implementation.
-func NewDNSRecordService(dnsRepo repository.DNSRecordRepository, bf bloomfilter.Filter, cache cache.DNSRecordCache) usecase.DNSRecordUseCase {
+func NewDNSRecordService(dnsRepo repository.DNSRecordRepository, bf bloomfilter.Filter, cache cache.DNSRecordCache, auditRepo repository.AuditLogRepository) usecase.DNSRecordUseCase { // Changed signature, kept usecase interface
 	return &dnsRecordService{
 		dnsRepo:     dnsRepo,
 		bloomFilter: bf,
 		cache:       cache,
+		auditRepo:   auditRepo,
 	}
 }
 
 func (s *dnsRecordService) CreateRecord(ctx context.Context, userID int64, domainName, value string, recordType domain.RecordType) (*domain.DNSRecord, error) {
+	// 1. Check Bloom Filter first
 	exists, err := s.bloomFilter.Test(ctx, domainName)
 	if err != nil {
-		// Log the error but proceed, as bloom filter is probabilistic
+		// Log error but proceed, as DB is the source of truth
+		log.Printf("Bloom filter check failed: %v", err) // Added log
 	}
 	if exists {
-		// Potential duplicate, check DB
+		// 2. If Bloom filter hits, check the database
 		_, err := s.dnsRepo.FindByDomainName(ctx, domainName)
 		if err == nil {
 			return nil, repository.ErrDuplicateDomainName
 		}
 		if !errors.Is(err, repository.ErrDNSRecordNotFound) {
-			return nil, err
+			return nil, err // A different database error occurred
 		}
 	}
 
+	// 3. Create the domain entity (which includes validation)
 	record, err := domain.NewDNSRecord(userID, domainName, value, recordType)
 	if err != nil {
 		return nil, err
 	}
 
+	// 4. Persist to the database
 	if err := s.dnsRepo.Create(ctx, record); err != nil {
 		return nil, err
 	}
 
-	// Add to bloom filter after successful DB insertion
-	_ = s.bloomFilter.Add(ctx, record.DomainName)
+	// 5. Add to Bloom Filter
+	if err := s.bloomFilter.Add(ctx, record.DomainName); err != nil {
+		// Log error, but don't fail the operation
+		log.Printf("Failed to add domain to Bloom filter: %v", err) // Added log
+	}
+
+	// 6. Fire-and-forget audit log
+	go func() {
+		auditLog, err := domain.NewAuditLog(userID, domain.ActionCreateDNSRecord, record.ID, nil, record)
+		if err == nil {
+			if err := s.auditRepo.Create(context.Background(), auditLog); err != nil {
+				log.Printf("failed to create audit log for DNS record creation: %v", err)
+			}
+		}
+	}()
 
 	return record, nil
 }
@@ -65,17 +85,17 @@ func (s *dnsRecordService) GetRecordByID(ctx context.Context, userID int64, reco
 
 	// Security check: user can only get their own records
 	if record.UserID != userID {
-		return nil, repository.ErrDNSRecordNotFound
+		return nil, repository.ErrDNSRecordNotFound // Hide existence from other users
 	}
 
 	return record, nil
 }
 
 func (s *dnsRecordService) ListRecordsByUser(ctx context.Context, userID int64, page, pageSize int) ([]*domain.DNSRecord, int, error) {
-	if page < 1 {
+	if page < 1 { // Keep original validation
 		page = 1
 	}
-	if pageSize < 1 || pageSize > 100 {
+	if pageSize < 1 || pageSize > 100 { // Keep original validation
 		pageSize = 10
 	}
 
@@ -93,61 +113,74 @@ func (s *dnsRecordService) ListRecordsByUser(ctx context.Context, userID int64, 
 }
 
 func (s *dnsRecordService) UpdateRecord(ctx context.Context, userID int64, recordID int64, domainName, value string, recordType domain.RecordType) (*domain.DNSRecord, error) {
-	record, err := s.dnsRepo.FindByID(ctx, recordID)
+	// 1. Verify ownership and get the old record
+	oldRecord, err := s.GetRecordByID(ctx, userID, recordID) // Use GetRecordByID for ownership check
 	if err != nil {
 		return nil, err
 	}
 
-	if record.UserID != userID {
-		return nil, repository.ErrDNSRecordNotFound
-	}
-
-	originalDomainName := record.DomainName
-
+	// 2. Create a new domain entity for validation
 	updatedRecord, err := domain.NewDNSRecord(userID, domainName, value, recordType)
 	if err != nil {
 		return nil, err
 	}
+	updatedRecord.ID = recordID         // Preserve original ID
+	updatedRecord.CreatedAt = oldRecord.CreatedAt // Preserve original creation time
 
-	record.DomainName = updatedRecord.DomainName
-	record.Value = updatedRecord.Value
-	record.Type = updatedRecord.Type
-
-	if err := s.dnsRepo.Update(ctx, record); err != nil {
+	// 3. Persist the update
+	if err := s.dnsRepo.Update(ctx, updatedRecord); err != nil {
 		return nil, err
 	}
 
-	// Invalidate cache for the old domain name
-	if err := s.cache.Delete(ctx, originalDomainName); err != nil {
-		// Log this error, but don't fail the operation
+	// 4. Invalidate cache
+	if err := s.cache.Delete(ctx, oldRecord.DomainName); err != nil {
+		log.Printf("Failed to delete old domain from cache: %v", err) // Added log
 	}
-	if originalDomainName != record.DomainName {
-		if err := s.cache.Delete(ctx, record.DomainName); err != nil {
-			// Log this error
+	if oldRecord.DomainName != updatedRecord.DomainName {
+		if err := s.cache.Delete(ctx, updatedRecord.DomainName); err != nil {
+			log.Printf("Failed to delete new domain from cache: %v", err) // Added log
 		}
 	}
 
-	return record, nil
+	// 5. Fire-and-forget audit log
+	go func() {
+		auditLog, err := domain.NewAuditLog(userID, domain.ActionUpdateDNSRecord, recordID, oldRecord, updatedRecord)
+		if err == nil {
+			if err := s.auditRepo.Create(context.Background(), auditLog); err != nil {
+				log.Printf("failed to create audit log for DNS record update: %v", err)
+			}
+		}
+	}()
+
+	return updatedRecord, nil
 }
 
 func (s *dnsRecordService) DeleteRecord(ctx context.Context, userID int64, recordID int64) error {
-	record, err := s.dnsRepo.FindByID(ctx, recordID)
+	// 1. Verify ownership and get the record to be deleted
+	record, err := s.GetRecordByID(ctx, userID, recordID) // Use GetRecordByID for ownership check
 	if err != nil {
 		return err
 	}
 
-	if record.UserID != userID {
-		return repository.ErrDNSRecordNotFound
-	}
-
+	// 2. Delete from the database
 	if err := s.dnsRepo.Delete(ctx, recordID); err != nil {
 		return err
 	}
 
-	// Invalidate cache
+	// 3. Invalidate cache
 	if err := s.cache.Delete(ctx, record.DomainName); err != nil {
-		// Log this error, but don't fail the operation
+		log.Printf("Failed to delete domain from cache: %v", err) // Added log
 	}
+
+	// 4. Fire-and-forget audit log
+	go func() {
+		auditLog, err := domain.NewAuditLog(userID, domain.ActionDeleteDNSRecord, recordID, record, nil)
+		if err == nil {
+			if err := s.auditRepo.Create(context.Background(), auditLog); err != nil {
+				log.Printf("failed to create audit log for DNS record deletion: %v", err)
+			}
+		}
+	}()
 
 	return nil
 }

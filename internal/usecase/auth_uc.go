@@ -9,5 +9,4 @@ type AuthUseCase interface {
 	Register(ctx context.Context, username, password string) error
 	Login(ctx context.Context, username, password string) (accessToken, refreshToken string, err error)
 }
-```
-```go
+

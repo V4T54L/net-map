@@ -9,6 +9,5 @@ import (
 type UserUseCase interface {
 	ListUsers(ctx context.Context) ([]*domain.User, error)
 	GetUserByID(ctx context.Context, id int64) (*domain.User, error)
-	UpdateUserStatus(ctx context.Context, id int64, isEnabled bool) (*domain.User, error)
+	UpdateUserStatus(ctx context.Context, actorID, targetUserID int64, isEnabled bool) (*domain.User, error) // Changed signature
 }
-

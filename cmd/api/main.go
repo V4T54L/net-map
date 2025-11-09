@@ -5,15 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	"internal-dns/internal/infrastructure/cache"
 	"internal-dns/internal/infrastructure/database"
-	httpTransport "internal-dns/internal/infrastructure/transport/http"
-	"internal-dns/internal/repository"
+	"internal-dns/internal/infrastructure/transport/http/routes"
 	"internal-dns/internal/service"
-	"internal-dns/internal/usecase"
+	"internal-dns/internal/usecase" // Keep usecase import for service interfaces
 	"internal-dns/pkg/bloomfilter"
 	"internal-dns/pkg/token"
 
@@ -37,29 +35,23 @@ func main() {
 		log.Fatalf("Could not connect to the database: %v", err)
 	}
 	defer dbPool.Close()
-	log.Println("Database connection successful")
+	log.Println("Database connection established")
 
 	// --- Redis & Bloom Filter Setup ---
-	redisDB, _ := strconv.Atoi(os.Getenv("REDIS_DB"))
-	redisClient, err := cache.NewRedisClient(ctx, os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"), redisDB)
+	redisClient, err := cache.NewRedisClient(ctx, os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"), 0) // Using 0 for default DB
 	if err != nil {
 		log.Fatalf("Could not connect to Redis: %v", err)
 	}
-	log.Println("Redis connection successful")
+	defer redisClient.Close()
+	log.Println("Redis connection established")
 
-	bloomFilterSize, _ := strconv.ParseUint(os.Getenv("BLOOM_FILTER_SIZE"), 10, 32)
-	if bloomFilterSize == 0 {
-		bloomFilterSize = 100000
-	}
-	bloomFilterHashes, _ := strconv.ParseUint(os.Getenv("BLOOM_FILTER_HASHES"), 10, 32)
-	if bloomFilterHashes == 0 {
-		bloomFilterHashes = 4
-	}
-	bloomFilter := bloomfilter.NewRedisBloomFilter(redisClient, "dns_domains_bloom", uint(bloomFilterSize), uint(bloomFilterHashes))
+	// Hardcoding bloom filter parameters as per attempted content
+	bf := bloomfilter.NewRedisBloomFilter(redisClient, "dns_domains_bloom", 100000, 7)
 
 	// --- Repositories ---
 	userRepo := database.NewUserPostgresRepository(dbPool)
 	dnsRecordRepo := database.NewDNSRecordPostgresRepository(dbPool)
+	auditLogRepo := database.NewAuditLogPostgresRepository(dbPool)
 
 	// --- Bloom Filter Population (on startup) ---
 	go func() {
@@ -70,7 +62,7 @@ func main() {
 			return
 		}
 		if len(domains) > 0 {
-			if err := bloomFilter.AddMulti(context.Background(), domains); err != nil {
+			if err := bf.AddMulti(context.Background(), domains); err != nil {
 				log.Printf("Error populating Bloom filter: %v", err)
 			}
 		}
@@ -78,9 +70,9 @@ func main() {
 	}()
 
 	// --- JWT ---
-	jwtSecret := os.Getenv("JWT_SECRET")
+	jwtSecret := os.Getenv("JWT_SECRET_KEY") // Changed env var name
 	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET environment variable is not set")
+		log.Fatal("JWT_SECRET_KEY environment variable is not set")
 	}
 	tokenGenerator := token.NewJWTGenerator(jwtSecret)
 
@@ -88,9 +80,9 @@ func main() {
 	dnsCache := cache.NewDNSRecordCache(redisClient)
 
 	// --- Services / Use Cases ---
-	authService := service.NewAuthService(userRepo, tokenGenerator)
-	userService := service.NewUserService(userRepo)
-	dnsRecordService := service.NewDNSRecordService(dnsRecordRepo, bloomFilter, dnsCache)
+	authService := service.NewAuthService(userRepo, tokenGenerator, auditLogRepo)
+	userService := service.NewUserService(userRepo, auditLogRepo)
+	dnsRecordService := service.NewDNSRecordService(dnsRecordRepo, bf, dnsCache, auditLogRepo)
 
 	// Setup Echo HTTP server
 	e := echo.New()
@@ -100,13 +92,13 @@ func main() {
 	e.Use(middleware.Recover())
 
 	// Routes
-	httpTransport.RegisterRoutes(e, authService, userService, dnsRecordService, userRepo, tokenGenerator)
+	routes.RegisterRoutes(e, authService, userService, dnsRecordService, userRepo, tokenGenerator)
 
 	// Start server
-	apiPort := os.Getenv("API_PORT")
+	apiPort := os.Getenv("HTTP_PORT") // Changed env var name
 	if apiPort == "" {
 		apiPort = "8080"
 	}
-	e.Logger.Fatal(e.Start(":" + apiPort))
+	e.Logger.Fatal(e.Start(fmt.Sprintf(":%s", apiPort)))
 }
 
