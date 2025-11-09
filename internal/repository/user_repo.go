@@ -12,11 +12,11 @@ var (
 	ErrUserAlreadyExists = errors.New("user with this username already exists")
 )
 
-// UserRepository defines the interface for user data storage.
+// UserRepository defines the interface for user data persistence.
 type UserRepository interface {
 	Create(ctx context.Context, user *domain.User) error
 	FindByUsername(ctx context.Context, username string) (*domain.User, error)
 	FindByID(ctx context.Context, id int64) (*domain.User, error)
+	FindAll(ctx context.Context) ([]*domain.User, error) // Added from attempted
+	Update(ctx context.Context, user *domain.User) error // Added from attempted
 }
-```
-```go

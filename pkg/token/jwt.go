@@ -1,7 +1,7 @@
 package token
 
 import (
-	"fmt"
+	"errors" // Added from attempted
 	"time"
 
 	"internal-dns/internal/domain"
@@ -9,30 +9,29 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Generator defines the interface for creating tokens.
+// Generator defines an interface for token generation.
 type Generator interface {
 	GenerateAccessToken(user *domain.User) (string, error)
 	GenerateRefreshToken(user *domain.User) (string, error)
+	ValidateToken(tokenString string) (*CustomClaims, error) // Added from attempted
 }
 
-// jwtGenerator is a JWT token generator.
 type jwtGenerator struct {
 	secretKey string
 }
 
-// NewJWTGenerator creates a new JWT generator.
-func NewJWTGenerator(secretKey string) Generator {
-	return &jwtGenerator{secretKey: secretKey}
-}
-
-// CustomClaims defines the custom claims for the JWT.
+// CustomClaims extends standard claims with user-specific data.
 type CustomClaims struct {
-	UserID int64             `json:"user_id"`
+	UserID int64           `json:"user_id"`
 	Role   domain.UserRole `json:"role"`
 	jwt.RegisteredClaims
 }
 
-// GenerateAccessToken creates a new access token for a user.
+// NewJWTGenerator creates a new JWT token generator.
+func NewJWTGenerator(secretKey string) Generator {
+	return &jwtGenerator{secretKey: secretKey}
+}
+
 func (g *jwtGenerator) GenerateAccessToken(user *domain.User) (string, error) {
 	claims := &CustomClaims{
 		UserID: user.ID,
@@ -40,15 +39,13 @@ func (g *jwtGenerator) GenerateAccessToken(user *domain.User) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 1)), // 1 hour
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Subject:   fmt.Sprintf("%d", user.ID),
+			Subject:   user.Username, // Changed from fmt.Sprintf("%d", user.ID)
 		},
 	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(g.secretKey))
 }
 
-// GenerateRefreshToken creates a new refresh token for a user.
 func (g *jwtGenerator) GenerateRefreshToken(user *domain.User) (string, error) {
 	claims := &CustomClaims{
 		UserID: user.ID,
@@ -56,12 +53,28 @@ func (g *jwtGenerator) GenerateRefreshToken(user *domain.User) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24 * 7)), // 7 days
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Subject:   fmt.Sprintf("%d", user.ID),
+			Subject:   user.Username, // Changed from fmt.Sprintf("%d", user.ID)
 		},
 	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(g.secretKey))
 }
-```
-```go
+
+func (g *jwtGenerator) ValidateToken(tokenString string) (*CustomClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(g.secretKey), nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*CustomClaims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, errors.New("invalid token")
+}

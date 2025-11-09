@@ -1,70 +1,96 @@
 package token
 
 import (
+	"internal-dns/internal/domain"
 	"testing"
 	"time"
 
-	"internal-dns/internal/domain"
-
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require" // Added from attempted
 )
 
 func TestJWTGenerator(t *testing.T) {
-	secret := "test-secret-key"
-	generator := NewJWTGenerator(secret)
+	secretKey := "supersecretkey" // Changed variable name
+	generator := NewJWTGenerator(secretKey)
 
 	user := &domain.User{
-		ID:   1,
-		Role: domain.RoleUser,
+		ID:       1,
+		Username: "testuser", // Added from attempted
+		Role:     domain.RoleUser,
 	}
 
-	t.Run("Generate Access Token", func(t *testing.T) {
+	t.Run("GenerateAccessToken", func(t *testing.T) { // Renamed test
 		tokenString, err := generator.GenerateAccessToken(user)
-		assert.NoError(t, err)
+		require.NoError(t, err) // Changed from assert.NoError
 		assert.NotEmpty(t, tokenString)
 
-		// Parse and validate
+		// Parse and validate the token
 		token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(token *jwt.Token) (interface{}, error) {
-			return []byte(secret), nil
+			return []byte(secretKey), nil
 		})
-
-		assert.NoError(t, err)
+		require.NoError(t, err) // Changed from assert.NoError
 		assert.True(t, token.Valid)
 
 		claims, ok := token.Claims.(*CustomClaims)
-		assert.True(t, ok)
+		require.True(t, ok) // Changed from assert.True
 		assert.Equal(t, user.ID, claims.UserID)
 		assert.Equal(t, user.Role, claims.Role)
-		assert.WithinDuration(t, time.Now().Add(time.Hour), claims.ExpiresAt.Time, 5*time.Second)
+		assert.WithinDuration(t, time.Now().Add(time.Hour), claims.ExpiresAt.Time, time.Second*5) // Changed duration format
 	})
 
-	t.Run("Generate Refresh Token", func(t *testing.T) {
+	t.Run("GenerateRefreshToken", func(t *testing.T) { // Renamed test
 		tokenString, err := generator.GenerateRefreshToken(user)
-		assert.NoError(t, err)
+		require.NoError(t, err) // Changed from assert.NoError
 		assert.NotEmpty(t, tokenString)
 
-		// Parse and validate
+		// Parse and validate the token
 		token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(token *jwt.Token) (interface{}, error) {
-			return []byte(secret), nil
+			return []byte(secretKey), nil
 		})
-
-		assert.NoError(t, err)
+		require.NoError(t, err) // Changed from assert.NoError
 		assert.True(t, token.Valid)
 
 		claims, ok := token.Claims.(*CustomClaims)
-		assert.True(t, ok)
+		require.True(t, ok) // Changed from assert.True
 		assert.Equal(t, user.ID, claims.UserID)
-		assert.WithinDuration(t, time.Now().Add(time.Hour*24*7), claims.ExpiresAt.Time, 5*time.Second)
+		assert.Equal(t, user.Role, claims.Role)
+		assert.WithinDuration(t, time.Now().Add(time.Hour*24*7), claims.ExpiresAt.Time, time.Second*5) // Changed duration format
+	})
+
+	t.Run("ValidateToken", func(t *testing.T) { // Added from attempted
+		t.Run("Valid Token", func(t *testing.T) {
+			tokenString, err := generator.GenerateAccessToken(user)
+			require.NoError(t, err)
+
+			claims, err := generator.ValidateToken(tokenString)
+			require.NoError(t, err)
+			assert.Equal(t, user.ID, claims.UserID)
+			assert.Equal(t, user.Role, claims.Role)
+			assert.Equal(t, user.Username, claims.Subject)
+		})
+
+		t.Run("Invalid Token - Bad Signature", func(t *testing.T) {
+			otherGenerator := NewJWTGenerator("differentsecret")
+			tokenString, err := otherGenerator.GenerateAccessToken(user)
+			require.NoError(t, err)
+
+			_, err = generator.ValidateToken(tokenString)
+			assert.Error(t, err)
+		})
+
+		t.Run("Invalid Token - Malformed", func(t *testing.T) {
+			_, err := generator.ValidateToken("bad.token.string")
+			assert.Error(t, err)
+		})
 	})
 }
 
 func BenchmarkGenerateAccessToken(b *testing.B) {
-	generator := NewJWTGenerator("benchmark-secret")
-	user := &domain.User{ID: 1, Role: domain.RoleAdmin}
+	generator := NewJWTGenerator("benchmarksecret")
+	user := &domain.User{ID: 1, Username: "benchuser", Role: domain.RoleUser} // Added Username
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = generator.GenerateAccessToken(user)
 	}
 }
-```

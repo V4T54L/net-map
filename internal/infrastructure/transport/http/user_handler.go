@@ -1,75 +1,110 @@
 package http
 
 import (
-	"net/http"
-
+	"internal-dns/internal/domain"
+	"internal-dns/internal/repository"
 	"internal-dns/internal/usecase"
+	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
 
-// UserHandler handles HTTP requests related to users.
+// UserResponse is a DTO for user data sent to clients.
+type UserResponse struct {
+	ID        int64            `json:"id"`
+	Username  string           `json:"username"`
+	Role      domain.UserRole  `json:"role"`
+	IsEnabled bool             `json:"is_enabled"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+}
+
+func toUserResponse(user *domain.User) UserResponse {
+	return UserResponse{
+		ID:        user.ID,
+		Username:  user.Username,
+		Role:      user.Role,
+		IsEnabled: user.IsEnabled,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}
+}
+
+func toUserResponseList(users []*domain.User) []UserResponse {
+	res := make([]UserResponse, len(users))
+	for i, user := range users {
+		res[i] = toUserResponse(user)
+	}
+	return res
+}
+
+// UpdateUserStatusRequest defines the payload for updating a user's status.
+type UpdateUserStatusRequest struct {
+	IsEnabled *bool `json:"is_enabled"`
+}
+
+// UserHandler handles user management HTTP requests.
 type UserHandler struct {
-	authUC usecase.AuthUseCase
+	userUC usecase.UserUseCase
 }
 
 // NewUserHandler creates a new UserHandler.
-func NewUserHandler(authUC usecase.AuthUseCase) *UserHandler {
-	return &UserHandler{authUC: authUC}
+func NewUserHandler(userUC usecase.UserUseCase) *UserHandler {
+	return &UserHandler{userUC: userUC}
 }
 
-type RegisterRequest struct {
-	Username string `json:"username" validate:"required,min=3"`
-	Password string `json:"password" validate:"required,min=8"`
+// ListUsers handles requests to list all users.
+func (h *UserHandler) ListUsers(c echo.Context) error {
+	users, err := h.userUC.ListUsers(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve users"})
+	}
+	return c.JSON(http.StatusOK, toUserResponseList(users))
 }
 
-type LoginRequest struct {
-	Username string `json:"username" validate:"required"`
-	Password string `json:"password" validate:"required"`
+// GetUser handles requests to get a single user by ID.
+func (h *UserHandler) GetUser(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+	}
+
+	user, err := h.userUC.GetUserByID(c.Request().Context(), id)
+	if err != nil {
+		if err == repository.ErrUserNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to retrieve user"})
+	}
+
+	return c.JSON(http.StatusOK, toUserResponse(user))
 }
 
-type AuthResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-}
+// UpdateUserStatus handles requests to enable or disable a user.
+func (h *UserHandler) UpdateUserStatus(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"})
+	}
 
-// Register handles user registration.
-func (h *UserHandler) Register(c echo.Context) error {
-	req := new(RegisterRequest)
+	req := new(UpdateUserStatusRequest)
 	if err := c.Bind(req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
 	}
 
-	// Basic validation
-	if len(req.Username) < 3 || len(req.Password) < 8 {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Username must be at least 3 characters and password at least 8 characters"})
+	if req.IsEnabled == nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "'is_enabled' field is required"})
 	}
 
-	err := h.authUC.Register(c.Request().Context(), req.Username, req.Password)
+	user, err := h.userUC.UpdateUserStatus(c.Request().Context(), id, *req.IsEnabled)
 	if err != nil {
-		// This should be more granular in a real app (e.g., check for duplicate username)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		if err == repository.ErrUserNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update user status"})
 	}
 
-	return c.JSON(http.StatusCreated, map[string]string{"message": "User registered successfully"})
+	return c.JSON(http.StatusOK, toUserResponse(user))
 }
-
-// Login handles user login.
-func (h *UserHandler) Login(c echo.Context) error {
-	req := new(LoginRequest)
-	if err := c.Bind(req); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
-	}
-
-	accessToken, refreshToken, err := h.authUC.Login(c.Request().Context(), req.Username, req.Password)
-	if err != nil {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
-	}
-
-	return c.JSON(http.StatusOK, AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-	})
-}
-```
-```go
