@@ -10,13 +10,12 @@ export interface User {
   IsEnabled: boolean;
 }
 
-// Decoded JWT payload from backend
 export interface DecodedToken {
   UserID: number;
   Role: 'user' | 'admin';
   exp: number;
   iat: number;
-  sub: string; // Subject, which is the username
+  sub: string;
 }
 
 export interface AuthContextType {
@@ -52,4 +51,15 @@ export interface DNSRecord {
   CreatedAt: string;
   UpdatedAt: string;
 }
-```
+
+export interface CreateDNSRecordRequest {
+  DomainName: string;
+  Type: 'A' | 'CNAME';
+  Value: string;
+}
+
+export interface UpdateDNSRecordRequest {
+  DomainName?: string;
+  Type?: 'A' | 'CNAME';
+  Value?: string;
+}
