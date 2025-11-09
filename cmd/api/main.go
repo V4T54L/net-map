@@ -13,8 +13,7 @@ import (
 	httpTransport "internal-dns/internal/infrastructure/transport/http"
 	"internal-dns/internal/repository"
 	"internal-dns/internal/service"
-	"internal-dns/internal/usecase" // Retained from original
-	"internal-dns/internal/util"     // Retained from original
+	"internal-dns/internal/usecase"
 	"internal-dns/pkg/bloomfilter"
 	"internal-dns/pkg/token"
 
@@ -29,19 +28,11 @@ func main() {
 		log.Println("No .env file found, using environment variables")
 	}
 
-	// --- Database Setup ---
-	dbUser := os.Getenv("DB_USER")
-	dbPassword := os.Getenv("DB_PASSWORD")
-	dbHost := os.Getenv("DB_HOST")
-	dbPort := os.Getenv("DB_PORT")
-	dbName := os.Getenv("DB_NAME")
-	dbSSLMode := os.Getenv("DB_SSLMODE")
-	connString := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", dbUser, dbPassword, dbHost, dbPort, dbName, dbSSLMode)
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	dbPool, err := database.NewPostgresPool(ctx, connString)
+	// --- Database Setup ---
+	dbPool, err := database.NewPostgresPool(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("Could not connect to the database: %v", err)
 	}
@@ -49,19 +40,22 @@ func main() {
 	log.Println("Database connection successful")
 
 	// --- Redis & Bloom Filter Setup ---
-	redisAddr := os.Getenv("REDIS_ADDR")
-	redisPassword := os.Getenv("REDIS_PASSWORD")
-	redisDBStr := os.Getenv("REDIS_DB")
-	redisDB, _ := strconv.Atoi(redisDBStr)
-
-	redisClient, err := cache.NewRedisClient(ctx, redisAddr, redisPassword, redisDB)
+	redisDB, _ := strconv.Atoi(os.Getenv("REDIS_DB"))
+	redisClient, err := cache.NewRedisClient(ctx, os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"), redisDB)
 	if err != nil {
 		log.Fatalf("Could not connect to Redis: %v", err)
 	}
 	log.Println("Redis connection successful")
 
-	// TODO: Make bloom filter size and hashes configurable
-	bloomFilter := bloomfilter.NewRedisBloomFilter(redisClient, "dns:domains:bloom", 100000, 7)
+	bloomFilterSize, _ := strconv.ParseUint(os.Getenv("BLOOM_FILTER_SIZE"), 10, 32)
+	if bloomFilterSize == 0 {
+		bloomFilterSize = 100000
+	}
+	bloomFilterHashes, _ := strconv.ParseUint(os.Getenv("BLOOM_FILTER_HASHES"), 10, 32)
+	if bloomFilterHashes == 0 {
+		bloomFilterHashes = 4
+	}
+	bloomFilter := bloomfilter.NewRedisBloomFilter(redisClient, "dns_domains_bloom", uint(bloomFilterSize), uint(bloomFilterHashes))
 
 	// --- Repositories ---
 	userRepo := database.NewUserPostgresRepository(dbPool)
@@ -84,16 +78,19 @@ func main() {
 	}()
 
 	// --- JWT ---
-	jwtSecret := os.Getenv("JWT_SECRET") // Using JWT_SECRET from attempted
+	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		log.Fatal("JWT_SECRET environment variable is not set")
 	}
 	tokenGenerator := token.NewJWTGenerator(jwtSecret)
 
+	// --- Cache ---
+	dnsCache := cache.NewDNSRecordCache(redisClient)
+
 	// --- Services / Use Cases ---
 	authService := service.NewAuthService(userRepo, tokenGenerator)
 	userService := service.NewUserService(userRepo)
-	dnsRecordService := service.NewDNSRecordService(dnsRecordRepo, bloomFilter)
+	dnsRecordService := service.NewDNSRecordService(dnsRecordRepo, bloomFilter, dnsCache)
 
 	// Setup Echo HTTP server
 	e := echo.New()
@@ -106,13 +103,10 @@ func main() {
 	httpTransport.RegisterRoutes(e, authService, userService, dnsRecordService, userRepo, tokenGenerator)
 
 	// Start server
-	port := os.Getenv("API_PORT") // Using API_PORT from attempted
-	if port == "" {
-		port = "8080"
+	apiPort := os.Getenv("API_PORT")
+	if apiPort == "" {
+		apiPort = "8080"
 	}
-	log.Printf("Starting API server on port %s", port)
-	if err := e.Start(":" + port); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
-	}
+	e.Logger.Fatal(e.Start(":" + apiPort))
 }
 

@@ -2,9 +2,10 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"internal-dns/internal/domain"
+	"internal-dns/internal/infrastructure/cache"
 	"internal-dns/internal/repository"
 	"internal-dns/internal/usecase"
 	"internal-dns/pkg/bloomfilter"
@@ -13,52 +14,45 @@ import (
 type dnsRecordService struct {
 	dnsRepo     repository.DNSRecordRepository
 	bloomFilter bloomfilter.Filter
-	// auditRepo repository.AuditLogRepository // To be added later
+	cache       cache.DNSRecordCache
 }
 
-func NewDNSRecordService(dnsRepo repository.DNSRecordRepository, bf bloomfilter.Filter) usecase.DNSRecordUseCase {
+// NewDNSRecordService creates a new DNSRecordUseCase implementation.
+func NewDNSRecordService(dnsRepo repository.DNSRecordRepository, bf bloomfilter.Filter, cache cache.DNSRecordCache) usecase.DNSRecordUseCase {
 	return &dnsRecordService{
 		dnsRepo:     dnsRepo,
 		bloomFilter: bf,
+		cache:       cache,
 	}
 }
 
 func (s *dnsRecordService) CreateRecord(ctx context.Context, userID int64, domainName, value string, recordType domain.RecordType) (*domain.DNSRecord, error) {
-	// 1. Check bloom filter for potential duplicates
 	exists, err := s.bloomFilter.Test(ctx, domainName)
 	if err != nil {
 		// Log the error but proceed, as bloom filter is probabilistic
-		fmt.Printf("Warning: Bloom filter check failed: %v\n", err)
 	}
 	if exists {
-		// If bloom filter says it exists, it might be a duplicate.
-		// The database will give the final confirmation.
-		// We can return a specific error here to hint at a potential duplicate.
-		return nil, repository.ErrDuplicateDomainName
+		// Potential duplicate, check DB
+		_, err := s.dnsRepo.FindByDomainName(ctx, domainName)
+		if err == nil {
+			return nil, repository.ErrDuplicateDomainName
+		}
+		if !errors.Is(err, repository.ErrDNSRecordNotFound) {
+			return nil, err
+		}
 	}
 
-	// 2. Create domain object (which includes validation)
 	record, err := domain.NewDNSRecord(userID, domainName, value, recordType)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Persist to database
 	if err := s.dnsRepo.Create(ctx, record); err != nil {
-		if err == repository.ErrDuplicateDomainName {
-			// Sync bloom filter if DB confirms duplicate
-			_ = s.bloomFilter.Add(ctx, domainName)
-		}
 		return nil, err
 	}
 
-	// 4. Add to bloom filter on success
-	if err := s.bloomFilter.Add(ctx, domainName); err != nil {
-		// Log error, but don't fail the operation
-		fmt.Printf("Warning: Failed to add domain to bloom filter: %v\n", err)
-	}
-
-	// TODO: Add audit log entry
+	// Add to bloom filter after successful DB insertion
+	_ = s.bloomFilter.Add(ctx, record.DomainName)
 
 	return record, nil
 }
@@ -69,9 +63,9 @@ func (s *dnsRecordService) GetRecordByID(ctx context.Context, userID int64, reco
 		return nil, err
 	}
 
-	// Authorization check: user can only get their own records
+	// Security check: user can only get their own records
 	if record.UserID != userID {
-		return nil, repository.ErrDNSRecordNotFound // Obscure error for security
+		return nil, repository.ErrDNSRecordNotFound
 	}
 
 	return record, nil
@@ -99,57 +93,66 @@ func (s *dnsRecordService) ListRecordsByUser(ctx context.Context, userID int64, 
 }
 
 func (s *dnsRecordService) UpdateRecord(ctx context.Context, userID int64, recordID int64, domainName, value string, recordType domain.RecordType) (*domain.DNSRecord, error) {
-	// 1. Fetch existing record
 	record, err := s.dnsRepo.FindByID(ctx, recordID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Authorization check
 	if record.UserID != userID {
 		return nil, repository.ErrDNSRecordNotFound
 	}
 
-	// 3. Validate new data
+	originalDomainName := record.DomainName
+
 	updatedRecord, err := domain.NewDNSRecord(userID, domainName, value, recordType)
 	if err != nil {
 		return nil, err
 	}
-	updatedRecord.ID = record.ID
-	updatedRecord.CreatedAt = record.CreatedAt
 
-	// 4. Persist update
-	if err := s.dnsRepo.Update(ctx, updatedRecord); err != nil {
+	record.DomainName = updatedRecord.DomainName
+	record.Value = updatedRecord.Value
+	record.Type = updatedRecord.Type
+
+	if err := s.dnsRepo.Update(ctx, record); err != nil {
 		return nil, err
 	}
 
-	// TODO: Add audit log entry
+	// Invalidate cache for the old domain name
+	if err := s.cache.Delete(ctx, originalDomainName); err != nil {
+		// Log this error, but don't fail the operation
+	}
+	if originalDomainName != record.DomainName {
+		if err := s.cache.Delete(ctx, record.DomainName); err != nil {
+			// Log this error
+		}
+	}
 
-	return updatedRecord, nil
+	return record, nil
 }
 
 func (s *dnsRecordService) DeleteRecord(ctx context.Context, userID int64, recordID int64) error {
-	// 1. Fetch existing record to check ownership
 	record, err := s.dnsRepo.FindByID(ctx, recordID)
 	if err != nil {
 		return err
 	}
 
-	// 2. Authorization check
 	if record.UserID != userID {
 		return repository.ErrDNSRecordNotFound
 	}
 
-	// 3. Perform deletion
 	if err := s.dnsRepo.Delete(ctx, recordID); err != nil {
 		return err
 	}
 
-	// Note: We don't remove from the bloom filter as it's not supported.
-	// It will be rebuilt periodically.
-
-	// TODO: Add audit log entry
+	// Invalidate cache
+	if err := s.cache.Delete(ctx, record.DomainName); err != nil {
+		// Log this error, but don't fail the operation
+	}
 
 	return nil
+}
+
+func (s *dnsRecordService) ResolveDomain(ctx context.Context, domainName string) (*domain.DNSRecord, error) {
+	return s.dnsRepo.FindByDomainName(ctx, domainName)
 }
 
