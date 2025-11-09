@@ -4,49 +4,67 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"time"
+	"time" // Keep time for context timeout if needed, but attempted removes it. Sticking with attempted's context.Background()
 
+	"internal-dns/configs"
 	"internal-dns/internal/infrastructure/cache"
 	"internal-dns/internal/infrastructure/database"
-	"internal-dns/internal/infrastructure/transport/http/routes"
+	"internal-dns/internal/infrastructure/transport/http"
 	"internal-dns/internal/service"
 	"internal-dns/internal/usecase" // Keep usecase import for service interfaces
 	"internal-dns/pkg/bloomfilter"
 	"internal-dns/pkg/token"
 
-	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
+// @title Internal DNS Server API
+// @version 1.0
+// @description This is the API for the Internal DNS management service.
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url http://www.swagger.io/support
+// @contact.email support@swagger.io
+
+// @license.name Apache 2.0
+// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host localhost:8080
+// @BasePath /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 func main() {
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using environment variables")
+	// Load configuration
+	cfg, err := configs.LoadConfig()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	ctx := context.Background() // Using context.Background() as per attempted content
 
 	// --- Database Setup ---
-	dbPool, err := database.NewPostgresPool(ctx, os.Getenv("DATABASE_URL"))
+	dbPool, err := database.NewPostgresPool(ctx, cfg.DB_URL)
 	if err != nil {
-		log.Fatalf("Could not connect to the database: %v", err)
+		log.Fatalf("failed to connect to database: %v", err)
 	}
 	defer dbPool.Close()
 	log.Println("Database connection established")
 
 	// --- Redis & Bloom Filter Setup ---
-	redisClient, err := cache.NewRedisClient(ctx, os.Getenv("REDIS_ADDR"), os.Getenv("REDIS_PASSWORD"), 0) // Using 0 for default DB
+	redisClient, err := cache.NewRedisClient(ctx, cfg.REDIS_ADDR, cfg.REDIS_PASSWORD, cfg.REDIS_DB)
 	if err != nil {
-		log.Fatalf("Could not connect to Redis: %v", err)
+		log.Fatalf("failed to connect to redis: %v", err)
 	}
 	defer redisClient.Close()
 	log.Println("Redis connection established")
 
-	// Hardcoding bloom filter parameters as per attempted content
-	bf := bloomfilter.NewRedisBloomFilter(redisClient, "dns_domains_bloom", 100000, 7)
+	// Initialize Bloom Filter
+	bf := bloomfilter.NewRedisBloomFilter(redisClient, "dns_domains_bloom", cfg.BLOOM_FILTER_SIZE, cfg.BLOOM_FILTER_HASHES)
 
 	// --- Repositories ---
 	userRepo := database.NewUserPostgresRepository(dbPool)
@@ -70,11 +88,7 @@ func main() {
 	}()
 
 	// --- JWT ---
-	jwtSecret := os.Getenv("JWT_SECRET_KEY") // Changed env var name
-	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET_KEY environment variable is not set")
-	}
-	tokenGenerator := token.NewJWTGenerator(jwtSecret)
+	tokenGenerator := token.NewJWTGenerator(cfg.JWT_SECRET_KEY)
 
 	// --- Cache ---
 	dnsCache := cache.NewDNSRecordCache(redisClient)
@@ -90,15 +104,20 @@ func main() {
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{echo.POST, echo.GET, echo.PUT, echo.DELETE},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAuthorization},
+	}))
 
-	// Routes
-	routes.RegisterRoutes(e, authService, userService, dnsRecordService, userRepo, tokenGenerator)
+	// Register routes
+	http.RegisterRoutes(e, cfg, authService, userService, dnsRecordService, userRepo, tokenGenerator)
 
 	// Start server
-	apiPort := os.Getenv("HTTP_PORT") // Changed env var name
-	if apiPort == "" {
-		apiPort = "8080"
+	serverAddr := fmt.Sprintf(":%s", cfg.API_PORT)
+	log.Printf("Starting API server on %s", serverAddr)
+	if err := e.Start(serverAddr); err != nil {
+		e.Logger.Fatal(err)
 	}
-	e.Logger.Fatal(e.Start(fmt.Sprintf(":%s", apiPort)))
 }
 
