@@ -2,6 +2,7 @@ package bloomfilter
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -22,23 +23,31 @@ func setupTestRedis(t testing.TB) *redis.Client {
 
 func TestRedisBloomFilter(t *testing.T) {
 	client := setupTestRedis(t)
+	bf := NewRedisBloomFilter(client, "test_bloom", 1000, 4)
 	ctx := context.Background()
-	bf := NewRedisBloomFilter(client, "test_bloom", 1000, 3)
 
 	t.Run("Add and Test", func(t *testing.T) {
-		// Add an item
-		err := bf.Add(ctx, "hello")
+		item1 := "hello"
+		item2 := "world"
+
+		// Test before adding
+		exists, err := bf.Test(ctx, item1)
+		require.NoError(t, err)
+		require.False(t, exists)
+
+		// Add item1
+		err = bf.Add(ctx, item1)
 		require.NoError(t, err)
 
-		// Test for the added item (should be true)
-		exists, err := bf.Test(ctx, "hello")
+		// Test after adding
+		exists, err = bf.Test(ctx, item1)
 		require.NoError(t, err)
-		require.True(t, exists, "item 'hello' should exist in the filter")
+		require.True(t, exists)
 
-		// Test for a non-existent item (should be false)
-		exists, err = bf.Test(ctx, "world")
+		// Test non-existent item2
+		exists, err = bf.Test(ctx, item2)
 		require.NoError(t, err)
-		require.False(t, exists, "item 'world' should not exist in the filter")
+		require.False(t, exists)
 	})
 
 	t.Run("AddMulti", func(t *testing.T) {
@@ -49,39 +58,42 @@ func TestRedisBloomFilter(t *testing.T) {
 		for _, item := range items {
 			exists, err := bf.Test(ctx, item)
 			require.NoError(t, err)
-			require.True(t, exists, "item '%s' should exist after AddMulti", item)
+			require.True(t, exists, "item %s should exist", item)
 		}
 
 		exists, err := bf.Test(ctx, "grape")
 		require.NoError(t, err)
-		require.False(t, exists, "item 'grape' should not exist")
+		require.False(t, exists)
 	})
 }
 
 func BenchmarkBloomFilter_Add(b *testing.B) {
 	client := setupTestRedis(b)
+	bf := NewRedisBloomFilter(client, "bench_bloom_add", 100000, 4)
 	ctx := context.Background()
-	bf := NewRedisBloomFilter(client, "bench_bloom_add", 100000, 5)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		bf.Add(ctx, "item"+string(rune(i)))
+		item := fmt.Sprintf("item-%d", i)
+		_ = bf.Add(ctx, item)
 	}
 }
 
 func BenchmarkBloomFilter_Test(b *testing.B) {
 	client := setupTestRedis(b)
+	bf := NewRedisBloomFilter(client, "bench_bloom_test", 100000, 4)
 	ctx := context.Background()
-	bf := NewRedisBloomFilter(client, "bench_bloom_test", 100000, 5)
 
 	// Pre-populate the filter
 	for i := 0; i < 10000; i++ {
-		bf.Add(ctx, "item"+string(rune(i)))
+		item := fmt.Sprintf("item-%d", i)
+		_ = bf.Add(ctx, item)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		bf.Test(ctx, "item"+string(rune(i)))
+		item := fmt.Sprintf("item-%d", i)
+		_, _ = bf.Test(ctx, item)
 	}
 }
-```
+

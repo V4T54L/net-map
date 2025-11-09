@@ -18,13 +18,11 @@ type Filter interface {
 type redisBloomFilter struct {
 	client *redis.Client
 	key    string
-	size   uint
-	hashes uint
+	size   uint // m
+	hashes uint // k
 }
 
-// NewRedisBloomFilter creates a new Bloom filter backed by Redis.
-// size: the size of the bit array (m).
-// hashes: the number of hash functions (k).
+// NewRedisBloomFilter creates a new Redis-backed Bloom filter.
 func NewRedisBloomFilter(client *redis.Client, key string, size, hashes uint) Filter {
 	return &redisBloomFilter{
 		client: client,
@@ -34,6 +32,8 @@ func NewRedisBloomFilter(client *redis.Client, key string, size, hashes uint) Fi
 	}
 }
 
+// locations generates k hash values for a given value.
+// It uses a double hashing technique to generate multiple hash values from two base hashes.
 func (bf *redisBloomFilter) locations(value string) []uint {
 	locations := make([]uint, bf.hashes)
 	h1 := fnv.New64a()
@@ -45,26 +45,28 @@ func (bf *redisBloomFilter) locations(value string) []uint {
 	hash2 := h2.Sum64()
 
 	for i := uint(0); i < bf.hashes; i++ {
-		// Double hashing to generate k hash values
-		loc := (hash1 + uint64(i)*hash2) % uint64(bf.size)
-		locations[i] = uint(loc)
+		locations[i] = uint((hash1 + uint64(i)*hash2) % uint64(bf.size))
 	}
 	return locations
 }
 
+// Add adds a value to the Bloom filter.
 func (bf *redisBloomFilter) Add(ctx context.Context, value string) error {
+	locations := bf.locations(value)
 	pipe := bf.client.Pipeline()
-	for _, loc := range bf.locations(value) {
+	for _, loc := range locations {
 		pipe.SetBit(ctx, bf.key, int64(loc), 1)
 	}
 	_, err := pipe.Exec(ctx)
 	return err
 }
 
+// AddMulti adds multiple values to the Bloom filter.
 func (bf *redisBloomFilter) AddMulti(ctx context.Context, values []string) error {
 	pipe := bf.client.Pipeline()
 	for _, value := range values {
-		for _, loc := range bf.locations(value) {
+		locations := bf.locations(value)
+		for _, loc := range locations {
 			pipe.SetBit(ctx, bf.key, int64(loc), 1)
 		}
 	}
@@ -72,10 +74,13 @@ func (bf *redisBloomFilter) AddMulti(ctx context.Context, values []string) error
 	return err
 }
 
+// Test checks if a value is possibly in the Bloom filter.
+// It returns true if the value might be in the set, and false if it is definitely not.
 func (bf *redisBloomFilter) Test(ctx context.Context, value string) (bool, error) {
+	locations := bf.locations(value)
 	pipe := bf.client.Pipeline()
-	results := make([]*redis.IntCmd, bf.hashes)
-	for i, loc := range bf.locations(value) {
+	results := make([]*redis.IntCmd, len(locations))
+	for i, loc := range locations {
 		results[i] = pipe.GetBit(ctx, bf.key, int64(loc))
 	}
 	_, err := pipe.Exec(ctx)

@@ -5,90 +5,72 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require" // Added from attempted
+	"github.com/stretchr/testify/require"
 )
 
 func TestJWTGenerator(t *testing.T) {
-	secretKey := "supersecretkey" // Changed variable name
+	secretKey := "test-secret-key"
 	generator := NewJWTGenerator(secretKey)
-
 	user := &domain.User{
 		ID:       1,
-		Username: "testuser", // Added from attempted
+		Username: "testuser",
 		Role:     domain.RoleUser,
 	}
 
-	t.Run("GenerateAccessToken", func(t *testing.T) { // Renamed test
+	t.Run("GenerateAccessToken", func(t *testing.T) {
 		tokenString, err := generator.GenerateAccessToken(user)
-		require.NoError(t, err) // Changed from assert.NoError
+		require.NoError(t, err)
 		assert.NotEmpty(t, tokenString)
 
-		// Parse and validate the token
-		token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(token *jwt.Token) (interface{}, error) {
-			return []byte(secretKey), nil
-		})
-		require.NoError(t, err) // Changed from assert.NoError
-		assert.True(t, token.Valid)
-
-		claims, ok := token.Claims.(*CustomClaims)
-		require.True(t, ok) // Changed from assert.True
+		claims, err := generator.ValidateToken(tokenString)
+		require.NoError(t, err)
 		assert.Equal(t, user.ID, claims.UserID)
 		assert.Equal(t, user.Role, claims.Role)
-		assert.WithinDuration(t, time.Now().Add(time.Hour), claims.ExpiresAt.Time, time.Second*5) // Changed duration format
+		assert.Equal(t, user.Username, claims.Subject)
+		assert.WithinDuration(t, time.Now().Add(time.Hour), claims.ExpiresAt.Time, time.Second*5)
 	})
 
-	t.Run("GenerateRefreshToken", func(t *testing.T) { // Renamed test
+	t.Run("GenerateRefreshToken", func(t *testing.T) {
 		tokenString, err := generator.GenerateRefreshToken(user)
-		require.NoError(t, err) // Changed from assert.NoError
+		require.NoError(t, err)
 		assert.NotEmpty(t, tokenString)
 
-		// Parse and validate the token
-		token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(token *jwt.Token) (interface{}, error) {
-			return []byte(secretKey), nil
-		})
-		require.NoError(t, err) // Changed from assert.NoError
-		assert.True(t, token.Valid)
-
-		claims, ok := token.Claims.(*CustomClaims)
-		require.True(t, ok) // Changed from assert.True
+		claims, err := generator.ValidateToken(tokenString)
+		require.NoError(t, err)
 		assert.Equal(t, user.ID, claims.UserID)
 		assert.Equal(t, user.Role, claims.Role)
-		assert.WithinDuration(t, time.Now().Add(time.Hour*24*7), claims.ExpiresAt.Time, time.Second*5) // Changed duration format
+		assert.Equal(t, user.Username, claims.Subject)
+		assert.WithinDuration(t, time.Now().Add(time.Hour*24*7), claims.ExpiresAt.Time, time.Second*5)
 	})
 
-	t.Run("ValidateToken", func(t *testing.T) { // Added from attempted
-		t.Run("Valid Token", func(t *testing.T) {
-			tokenString, err := generator.GenerateAccessToken(user)
-			require.NoError(t, err)
+	t.Run("ValidateToken", func(t *testing.T) {
+		// Valid token
+		validToken, err := generator.GenerateAccessToken(user)
+		require.NoError(t, err)
+		_, err = generator.ValidateToken(validToken)
+		assert.NoError(t, err)
 
-			claims, err := generator.ValidateToken(tokenString)
-			require.NoError(t, err)
-			assert.Equal(t, user.ID, claims.UserID)
-			assert.Equal(t, user.Role, claims.Role)
-			assert.Equal(t, user.Username, claims.Subject)
-		})
+		// Invalid signature
+		otherGenerator := NewJWTGenerator("different-secret")
+		invalidToken, err := otherGenerator.GenerateAccessToken(user)
+		require.NoError(t, err)
+		_, err = generator.ValidateToken(invalidToken)
+		assert.Error(t, err)
 
-		t.Run("Invalid Token - Bad Signature", func(t *testing.T) {
-			otherGenerator := NewJWTGenerator("differentsecret")
-			tokenString, err := otherGenerator.GenerateAccessToken(user)
-			require.NoError(t, err)
-
-			_, err = generator.ValidateToken(tokenString)
-			assert.Error(t, err)
-		})
-
-		t.Run("Invalid Token - Malformed", func(t *testing.T) {
-			_, err := generator.ValidateToken("bad.token.string")
-			assert.Error(t, err)
-		})
+		// Malformed token
+		_, err = generator.ValidateToken("not.a.real.token")
+		assert.Error(t, err)
 	})
 }
 
 func BenchmarkGenerateAccessToken(b *testing.B) {
-	generator := NewJWTGenerator("benchmarksecret")
-	user := &domain.User{ID: 1, Username: "benchuser", Role: domain.RoleUser} // Added Username
+	generator := NewJWTGenerator("benchmark-secret")
+	user := &domain.User{
+		ID:       1,
+		Username: "benchuser",
+		Role:     domain.RoleAdmin,
+	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_, _ = generator.GenerateAccessToken(user)
