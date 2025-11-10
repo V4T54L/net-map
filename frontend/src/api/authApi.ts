@@ -1,4 +1,4 @@
-import { LoginRequest, RegisterRequest, AuthResponse } from '../types';
+import type { LoginRequest, RegisterRequest, AuthResponse } from '../types';
 import { axiosPublic } from './axios';
 
 export const registerUser = async (data: RegisterRequest): Promise<void> => {

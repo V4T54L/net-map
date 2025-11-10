@@ -1,7 +1,7 @@
 import React from 'react';
 import Button from './Button';
 
-interface Column {
+export interface Column {
   header: string;
   accessor: string;
   render?: (row: any) => React.ReactNode;

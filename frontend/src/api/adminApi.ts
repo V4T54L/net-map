@@ -1,5 +1,5 @@
 import { axiosPrivate } from './axios';
-import { User } from '../types';
+import { type User } from '../types';
 
 export const getUsers = async (): Promise<User[]> => {
     const response = await axiosPrivate.get<User[]>('/admin/users');

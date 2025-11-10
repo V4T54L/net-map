@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getDnsRecords, createDnsRecord, updateDnsRecord, deleteDnsRecord } from '../../api/dnsRecordApi';
-import { DNSRecord, CreateDNSRecordRequest } from '../../types';
-import Table, { Column } from '../common/Table';
+import type { DNSRecord, CreateDNSRecordRequest } from '../../types';
+import Table, { type Column } from '../common/Table';
 import Modal from '../common/Modal';
 import DNSRecordForm from '../dns/DNSRecordForm';
 import DeleteConfirmation from '../dns/DeleteConfirmation';
-import useDebounce from '../../hooks/useDebounce';
+import { useDebounce } from '../../hooks/useDebounce';
 
 const AllDnsRecordsTable: React.FC = () => {
     const [records, setRecords] = useState<DNSRecord[]>([]);
@@ -151,7 +151,7 @@ const AllDnsRecordsTable: React.FC = () => {
             />
             <Modal isOpen={isModalOpen} onClose={closeModal} title={
                 modalMode === 'create' ? 'Create DNS Record' :
-                modalMode === 'edit' ? 'Edit DNS Record' : 'Delete DNS Record'
+                    modalMode === 'edit' ? 'Edit DNS Record' : 'Delete DNS Record'
             }>
                 {modalMode === 'create' && <DNSRecordForm onCancel={closeModal} onSubmit={handleFormSubmit} isLoading={formSubmitting} serverError={formError || undefined} />}
                 {modalMode === 'edit' && currentRecord && <DNSRecordForm record={currentRecord} onCancel={closeModal} onSubmit={handleFormSubmit} isLoading={formSubmitting} serverError={formError || undefined} />}

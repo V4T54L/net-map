@@ -1,9 +1,8 @@
-import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import AllDnsRecordsTable from './AllDnsRecordsTable';
 import * as dnsRecordApi from '../../api/dnsRecordApi';
-import { DNSRecord } from '../../types';
-import { AuthContext } from '../../contexts/AuthContext';
+import type { AuthTokens, DNSRecord, User } from '../../types';
+import AuthContext from '../../contexts/AuthContext';
 
 jest.mock('../../api/dnsRecordApi');
 const mockedDnsRecordApi = dnsRecordApi as jest.Mocked<typeof dnsRecordApi>;
@@ -14,7 +13,7 @@ const mockRecords: DNSRecord[] = [
 ];
 
 const mockAuthContext = {
-    user: { ID: 1, Username: 'admin', Role: 'admin', IsEnabled: true },
+    user: { ID: 1, Username: 'admin', Role: 'admin' as "admin" | "user", IsEnabled: true, CreatedAt: "", UpdatedAt: "" },
     tokens: { accessToken: 'fake-token', refreshToken: 'fake-token' },
     loading: false,
     login: jest.fn(),

@@ -1,5 +1,5 @@
 import { axiosPrivate } from './axios';
-import { DNSRecord, CreateDNSRecordRequest, UpdateDNSRecordRequest } from '../types';
+import type { DNSRecord, CreateDNSRecordRequest, UpdateDNSRecordRequest } from '../types';
 
 interface GetDnsRecordsResponse {
   records: DNSRecord[];
@@ -11,7 +11,7 @@ export const getDnsRecords = async (
 ): Promise<GetDnsRecordsResponse> => {
   const response = await axiosPrivate.get('/dns-records', { params });
   const totalCount = parseInt(response.headers['x-total-count'] || '0', 10);
-  return { records: response.data, totalCount };
+  return { records: response.data || [], totalCount };
 };
 
 export const createDnsRecord = async (data: CreateDNSRecordRequest): Promise<DNSRecord> => {

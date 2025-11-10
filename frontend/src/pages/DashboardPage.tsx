@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { DNSRecord, CreateDNSRecordRequest } from '../types';
+import { useState, useEffect, useCallback } from 'react';
+import type { DNSRecord, CreateDNSRecordRequest } from '../types';
 import * as dnsRecordApi from '../api/dnsRecordApi';
 import Table from '../components/common/Table';
 import Button from '../components/common/Button';
@@ -121,10 +121,11 @@ const DashboardPage = () => {
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">DNS Records Dashboard</h1>
-      
+
       <div className="flex justify-between items-center mb-4">
         <div className="w-1/3">
-          <Input 
+          <Input
+            label='search'
             placeholder="Search by domain name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -151,7 +152,7 @@ const DashboardPage = () => {
         onClose={closeModal}
         title={
           modalMode === 'create' ? 'Create DNS Record' :
-          modalMode === 'edit' ? 'Edit DNS Record' : 'Confirm Deletion'
+            modalMode === 'edit' ? 'Edit DNS Record' : 'Confirm Deletion'
         }
       >
         {modalMode === 'create' || modalMode === 'edit' ? (

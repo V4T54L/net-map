@@ -1,8 +1,7 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import UserManagementTable from './UserManagementTable';
 import * as adminApi from '../../api/adminApi';
-import { User } from '../../types';
+import type{ User } from '../../types';
 
 jest.mock('../../api/adminApi');
 const mockedAdminApi = adminApi as jest.Mocked<typeof adminApi>;

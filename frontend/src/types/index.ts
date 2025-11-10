@@ -40,8 +40,8 @@ export interface LoginRequest {
 }
 
 export interface AuthResponse {
-    AccessToken: string;
-    RefreshToken: string;
+    accessToken: string;
+    refreshToken: string;
 }
 
 export interface DNSRecord {

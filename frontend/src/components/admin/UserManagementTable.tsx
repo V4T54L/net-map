@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getUsers, updateUserStatus } from '../../api/adminApi';
-import { User } from '../../types';
+import type { User } from '../../types';
 import Table from '../common/Table';
-import { Column } from '../common/Table';
+import type { Column } from '../common/Table';
 
 const UserManagementTable: React.FC = () => {
     const [users, setUsers] = useState<User[]>([]);

@@ -1,13 +1,12 @@
-import React from 'react';
 import { render, screen, act } from '@testing-library/react';
 import { AuthProvider, useAuth } from './AuthContext';
 import * as authApi from '../api/authApi';
-import { User } from '../types';
+import type { User } from '../types';
 
 jest.mock('../api/authApi');
 const mockedAuthApi = authApi as jest.Mocked<typeof authApi>;
 
-const mockUser: User = { ID: 1, Username: 'testuser', Role: 'user', IsEnabled: true };
+// const mockUser: User = { ID: 1, Username: 'testuser', Role: 'user', IsEnabled: true };
 
 // Mock jwt-decode
 jest.mock('jwt-decode', () => ({
@@ -40,8 +39,8 @@ describe('AuthContext', () => {
 
   test('login successfully updates user state and localStorage', async () => {
     mockedAuthApi.loginUser.mockResolvedValue({
-      AccessToken: 'fake-access-token',
-      RefreshToken: 'fake-refresh-token',
+      accessToken: 'fake-access-token',
+      refreshToken: 'fake-refresh-token',
     });
 
     render(
@@ -62,8 +61,8 @@ describe('AuthContext', () => {
   test('logout clears user state and localStorage', async () => {
     // First, log in
     mockedAuthApi.loginUser.mockResolvedValue({
-      AccessToken: 'fake-access-token',
-      RefreshToken: 'fake-refresh-token',
+      accessToken: 'fake-access-token',
+      refreshToken: 'fake-refresh-token',
     });
     render(
       <AuthProvider>

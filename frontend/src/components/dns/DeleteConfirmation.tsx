@@ -1,5 +1,5 @@
 import React from 'react';
-import { DNSRecord } from '../../types';
+import type { DNSRecord } from '../../types';
 import Button from '../common/Button';
 
 interface DeleteConfirmationProps {

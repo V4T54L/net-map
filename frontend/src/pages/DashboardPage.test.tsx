@@ -1,9 +1,8 @@
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import DashboardPage from './DashboardPage';
 import * as dnsRecordApi from '../api/dnsRecordApi';
-import { DNSRecord } from '../types';
+import type { DNSRecord } from '../types';
 
 jest.mock('../api/dnsRecordApi');
 const mockedDnsRecordApi = dnsRecordApi as jest.Mocked<typeof dnsRecordApi>;
