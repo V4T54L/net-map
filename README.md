@@ -34,7 +34,7 @@ This project provides an internal DNS server with a web interface to manage doma
 
 1.  **Clone the repository:**
     ```sh
-    git clone <repository-url>
+    git clone https://github.com/V4T54L/net-map
     cd internal-dns-server
     ```
 
