@@ -39,6 +39,7 @@ func main() {
 
 	// Initialize repositories
 	dnsRecordRepo := database.NewDNSRecordPostgresRepository(dbPool)
+	// dnsRecordRepo := database.NewDNSRecordInMemoryRepository()
 	auditLogRepo := database.NewAuditLogPostgresRepository(dbPool) // Added auditLogRepo
 
 	// Initialize Bloom Filter (needed for service, though not directly used by DNS server logic)
@@ -46,24 +47,8 @@ func main() {
 
 	// Initialize Cache
 	dnsCache := cache.NewDNSRecordCache(redisClient)
-	domainNames, err := dnsRecordRepo.GetAllDomainNames(context.TODO())
-	if err != nil {
-		log.Fatal("Error fetching the records: ", err)
-	}
-
-	bf.AddMulti(context.TODO(), domainNames)
-
-	// for _, dName := range domainNames {
-	// 	// record, err := dnsRecordRepo.FindByDomainName(context.TODO(), dName)
-	// 	// if err != nil {
-	// 	// 	log.Fatalf("\nError fetching the record for %s : %v", dName, err)
-	// 	// }
-	// 	// dnsCache.Set(context.TODO(), record)
-	// 	bf.
-	// 	log.Println("Domain added : ", dName)
-	// }
-
-	// Initialize services (use cases)
+	
+	// Initialize Service
 	dnsRecordService := service.NewDNSRecordService(dnsRecordRepo, bf, dnsCache, auditLogRepo) // Passed auditLogRepo
 
 	// Initialize and start DNS server
