@@ -1,4 +1,3 @@
-```go
 package domain
 
 import (
@@ -54,4 +53,3 @@ func NewAuditLog(userID int64, action ActionType, targetID int64, oldValue, newV
 		NewValue: newJSON,
 	}, nil
 }
-```

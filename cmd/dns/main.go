@@ -46,6 +46,22 @@ func main() {
 
 	// Initialize Cache
 	dnsCache := cache.NewDNSRecordCache(redisClient)
+	domainNames, err := dnsRecordRepo.GetAllDomainNames(context.TODO())
+	if err != nil {
+		log.Fatal("Error fetching the records: ", err)
+	}
+
+	bf.AddMulti(context.TODO(), domainNames)
+
+	// for _, dName := range domainNames {
+	// 	// record, err := dnsRecordRepo.FindByDomainName(context.TODO(), dName)
+	// 	// if err != nil {
+	// 	// 	log.Fatalf("\nError fetching the record for %s : %v", dName, err)
+	// 	// }
+	// 	// dnsCache.Set(context.TODO(), record)
+	// 	bf.
+	// 	log.Println("Domain added : ", dName)
+	// }
 
 	// Initialize services (use cases)
 	dnsRecordService := service.NewDNSRecordService(dnsRecordRepo, bf, dnsCache, auditLogRepo) // Passed auditLogRepo
@@ -59,4 +75,3 @@ func main() {
 		log.Fatalf("Failed to start DNS server: %v", err)
 	}
 }
-

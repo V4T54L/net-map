@@ -1,10 +1,10 @@
 package middleware
 
 import (
-	"context"
 	"internal-dns/internal/domain"
 	"internal-dns/internal/repository"
 	"internal-dns/pkg/token"
+	"log"
 	"net/http"
 	"strings"
 
@@ -66,12 +66,14 @@ func (m *JWTMiddleware) Auth(requiredRoles ...domain.UserRole) echo.MiddlewareFu
 				}
 			}
 
+			log.Println("\n\nUser from context: ", user.ID, user.Username, user.Role, user.IsEnabled)
+
 			// Store user in context
-			ctx := context.WithValue(c.Request().Context(), UserContextKey, user)
-			c.SetRequest(c.Request().WithContext(ctx))
+			// ctx := context.WithValue(c.Request().Context(), UserContextKey, user)
+			// c.SetRequest(c.Request().WithContext(ctx))
+			c.Set(string(UserContextKey), user)
 
 			return next(c)
 		}
 	}
 }
-

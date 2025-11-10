@@ -71,7 +71,7 @@ func toDNSRecordResponse(record *domain.DNSRecord) DNSRecordResponse {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /dns-records [post]
 func (h *DNSRecordHandler) CreateRecord(c echo.Context) error {
-	user, ok := c.Get(middleware.UserContextKey).(*domain.User)
+	user, ok := c.Get(string(middleware.UserContextKey)).(*domain.User)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid user in context"}) // Refined error message
 	}
@@ -111,7 +111,7 @@ func (h *DNSRecordHandler) CreateRecord(c echo.Context) error {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /dns-records/{id} [get]
 func (h *DNSRecordHandler) GetRecord(c echo.Context) error {
-	user, ok := c.Get(middleware.UserContextKey).(*domain.User)
+	user, ok := c.Get(string(middleware.UserContextKey)).(*domain.User)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid user in context"}) // Refined error message
 	}
@@ -147,7 +147,7 @@ func (h *DNSRecordHandler) GetRecord(c echo.Context) error {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /dns-records [get]
 func (h *DNSRecordHandler) ListRecords(c echo.Context) error {
-	user, ok := c.Get(middleware.UserContextKey).(*domain.User)
+	user, ok := c.Get(string(middleware.UserContextKey)).(*domain.User)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid user in context"}) // Refined error message
 	}
@@ -192,7 +192,7 @@ func (h *DNSRecordHandler) ListRecords(c echo.Context) error {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /dns-records/{id} [put]
 func (h *DNSRecordHandler) UpdateRecord(c echo.Context) error {
-	user, ok := c.Get(middleware.UserContextKey).(*domain.User)
+	user, ok := c.Get(string(middleware.UserContextKey)).(*domain.User)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid user in context"}) // Refined error message
 	}
@@ -239,7 +239,7 @@ func (h *DNSRecordHandler) UpdateRecord(c echo.Context) error {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /dns-records/{id} [delete]
 func (h *DNSRecordHandler) DeleteRecord(c echo.Context) error {
-	user, ok := c.Get(middleware.UserContextKey).(*domain.User)
+	user, ok := c.Get(string(middleware.UserContextKey)).(*domain.User)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid user in context"}) // Refined error message
 	}

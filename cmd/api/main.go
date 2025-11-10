@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time" // Keep time for context timeout if needed, but attempted removes it. Sticking with attempted's context.Background()
 
+	// Keep time for context timeout if needed, but attempted removes it. Sticking with attempted's context.Background()
 	"internal-dns/configs"
 	"internal-dns/internal/infrastructure/cache"
 	"internal-dns/internal/infrastructure/database"
 	"internal-dns/internal/infrastructure/transport/http"
-	"internal-dns/internal/service"
-	"internal-dns/internal/usecase" // Keep usecase import for service interfaces
+	"internal-dns/internal/service" // Keep usecase import for service interfaces
 	"internal-dns/pkg/bloomfilter"
 	"internal-dns/pkg/token"
 
@@ -120,4 +119,3 @@ func main() {
 		e.Logger.Fatal(err)
 	}
 }
-

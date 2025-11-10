@@ -1,4 +1,3 @@
-```go
 package database
 
 import (
@@ -25,4 +24,3 @@ func (r *auditLogPostgresRepository) Create(ctx context.Context, log *domain.Aud
 	_, err := r.db.Exec(ctx, query, log.UserID, log.Action, log.TargetID, log.OldValue, log.NewValue)
 	return err
 }
-```

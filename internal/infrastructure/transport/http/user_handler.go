@@ -126,7 +126,7 @@ func (h *UserHandler) GetUser(c echo.Context) error {
 // @Failure 500 {object} map[string]string "Internal server error"
 // @Router /admin/users/{id}/status [put]
 func (h *UserHandler) UpdateUserStatus(c echo.Context) error {
-	actor, ok := c.Get(middleware.UserContextKey).(*domain.User) // Added actor retrieval
+	actor, ok := c.Get(string(middleware.UserContextKey)).(*domain.User) // Added actor retrieval
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid actor in context"}) // Changed error response
 	}
@@ -136,7 +136,7 @@ func (h *UserHandler) UpdateUserStatus(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid user ID"}) // Changed error response
 	}
 
-	var req UpdateUserStatusRequest // Changed to var declaration
+	var req UpdateUserStatusRequest                              // Changed to var declaration
 	if err := c.Bind(&req); err != nil || req.IsEnabled == nil { // Combined bind and nil check
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload, 'isEnabled' is required"}) // Changed error response
 	}

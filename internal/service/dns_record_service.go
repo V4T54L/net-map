@@ -124,7 +124,7 @@ func (s *dnsRecordService) UpdateRecord(ctx context.Context, userID int64, recor
 	if err != nil {
 		return nil, err
 	}
-	updatedRecord.ID = recordID         // Preserve original ID
+	updatedRecord.ID = recordID                   // Preserve original ID
 	updatedRecord.CreatedAt = oldRecord.CreatedAt // Preserve original creation time
 
 	// 3. Persist the update
@@ -188,4 +188,3 @@ func (s *dnsRecordService) DeleteRecord(ctx context.Context, userID int64, recor
 func (s *dnsRecordService) ResolveDomain(ctx context.Context, domainName string) (*domain.DNSRecord, error) {
 	return s.dnsRepo.FindByDomainName(ctx, domainName)
 }
-

@@ -1,0 +1,614 @@
+basePath: /api/v1
+definitions:
+  domain.UserRole:
+    enum:
+    - user
+    - admin
+    type: string
+    x-enum-varnames:
+    - RoleUser
+    - RoleAdmin
+  http.AuthResponse:
+    properties:
+      accessToken:
+        description: Changed to camelCase
+        type: string
+      refreshToken:
+        description: Changed to camelCase
+        type: string
+    type: object
+  http.CreateDNSRecordRequest:
+    properties:
+      domainName:
+        description: Changed to camelCase
+        type: string
+      type:
+        type: string
+      value:
+        type: string
+    type: object
+  http.DNSRecordResponse:
+    properties:
+      createdAt:
+        description: Changed to camelCase
+        type: string
+      domainName:
+        description: Changed to camelCase
+        type: string
+      id:
+        type: integer
+      type:
+        type: string
+      updatedAt:
+        description: Changed to camelCase
+        type: string
+      userId:
+        description: Changed to camelCase
+        type: integer
+      value:
+        type: string
+    type: object
+  http.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  http.RegisterRequest:
+    properties:
+      password:
+        description: Changed min=8 to min=6
+        minLength: 6
+        type: string
+      username:
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  http.UpdateDNSRecordRequest:
+    properties:
+      domainName:
+        description: Changed to camelCase
+        type: string
+      type:
+        type: string
+      value:
+        type: string
+    type: object
+  http.UpdateUserStatusRequest:
+    properties:
+      isEnabled:
+        description: Changed to camelCase
+        type: boolean
+    required:
+    - isEnabled
+    type: object
+  http.UserResponse:
+    properties:
+      createdAt:
+        description: Changed to camelCase
+        type: string
+      id:
+        type: integer
+      isEnabled:
+        description: Changed to camelCase
+        type: boolean
+      role:
+        $ref: '#/definitions/domain.UserRole'
+      updatedAt:
+        description: Changed to camelCase
+        type: string
+      username:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is the API for the Internal DNS management service.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Internal DNS Server API
+  version: "1.0"
+paths:
+  /admin/users:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a list of all users. (Admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/http.UserResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List all users
+      tags:
+      - admin
+  /admin/users/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a single user by their ID. (Admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.UserResponse'
+        "400":
+          description: Invalid ID
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a user by ID
+      tags:
+      - admin
+  /admin/users/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Enables or disables a user account. (Admin only)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update Status Payload
+        in: body
+        name: status
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateUserStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.UserResponse'
+        "400":
+          description: Invalid input
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a user's status
+      tags:
+      - admin
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns access and refresh tokens.
+      parameters:
+      - description: Login Credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/http.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.AuthResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Log in a user
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account.
+      parameters:
+      - description: Registration Info
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/http.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Invalid input
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: User already exists
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
+  /dns-records:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a paginated list of DNS records for the authenticated
+        user.
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Page size
+        in: query
+        name: pageSize
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-Total-Count:
+              description: Total number of records
+              type: string
+          schema:
+            items:
+              $ref: '#/definitions/http.DNSRecordResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List user's DNS records
+      tags:
+      - dns-records
+    post:
+      consumes:
+      - application/json
+      description: Creates a new DNS record for the authenticated user.
+      parameters:
+      - description: DNS Record
+        in: body
+        name: record
+        required: true
+        schema:
+          $ref: '#/definitions/http.CreateDNSRecordRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/http.DNSRecordResponse'
+        "400":
+          description: Invalid input
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Duplicate domain name
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a DNS record
+      tags:
+      - dns-records
+  /dns-records/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes a DNS record by its ID.
+      parameters:
+      - description: Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Invalid ID
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Record not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a DNS record
+      tags:
+      - dns-records
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a single DNS record by its ID.
+      parameters:
+      - description: Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.DNSRecordResponse'
+        "400":
+          description: Invalid ID
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Record not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get a DNS record by ID
+      tags:
+      - dns-records
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing DNS record.
+      parameters:
+      - description: Record ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated DNS Record
+        in: body
+        name: record
+        required: true
+        schema:
+          $ref: '#/definitions/http.UpdateDNSRecordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.DNSRecordResponse'
+        "400":
+          description: Invalid input
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Record not found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Duplicate domain name
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a DNS record
+      tags:
+      - dns-records
+  /health:
+    get:
+      consumes:
+      - '*/*'
+      description: get the status of server.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Show the status of server.
+      tags:
+      - health
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

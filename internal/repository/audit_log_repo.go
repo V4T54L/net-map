@@ -1,4 +1,3 @@
-```go
 package repository
 
 import (
@@ -9,4 +8,3 @@ import (
 type AuditLogRepository interface {
 	Create(ctx context.Context, log *domain.AuditLog) error
 }
-```

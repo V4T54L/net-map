@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"strings" // Keep strings for trimming in one test case
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -125,4 +124,3 @@ func TestNewDNSRecord(t *testing.T) {
 		})
 	}
 }
-

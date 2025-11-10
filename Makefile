@@ -1,4 +1,4 @@
-.PHONY: all run build test bench clean help swag
+.PHONY: all run build test bench clean help swag setup
 
 BINARY_API_NAME=dns-api
 BINARY_DNS_NAME=dns-server
@@ -31,6 +31,10 @@ clean:
 	@rm -f bin/$(BINARY_API_NAME)
 	@rm -f bin/$(BINARY_DNS_NAME)
 	@rm -rf docs/
+
+setup:
+	@echo "Installing swag-cli"
+	@go install github.com/swaggo/swag/cmd/swag@latest
 
 swag:
 	@echo "Generating Swagger documentation..."

@@ -1,7 +1,6 @@
 package token
 
 import (
-	"errors"
 	"fmt"
 	"internal-dns/internal/domain"
 	"time"
@@ -82,4 +81,3 @@ func (g *jwtGenerator) ValidateToken(tokenString string) (*CustomClaims, error) 
 
 	return nil, fmt.Errorf("invalid token")
 }
-

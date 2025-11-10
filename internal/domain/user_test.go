@@ -48,5 +48,3 @@ func TestUser_ValidatePassword(t *testing.T) {
 	assert.True(t, user.ValidatePassword(password), "Password should be valid")
 	assert.False(t, user.ValidatePassword("wrong-password"), "Password should be invalid")
 }
-```
-```go
